@@ -1,0 +1,157 @@
+Private Declare Function ShellExecute Lib "Shell32.dll" Alias "ShellExecuteA" (ByVal hwnd As Long, ByVal lpOperation As String, ByVal lpFile As String, ByVal lpParameters As String, ByVal lpDirectory As String, ByVal nShowCmd As Long) As Long
+Public CoSys_AX As Double
+Public CoSys_AY As Double
+Public CoSys_BX As Double
+Public CoSys_BY As Double
+Public CoSys_Az As Double
+
+Public Ba_Min_x As Double
+Public Ba_Min_y As Double
+Public Ba_Min_H As Double
+
+Public Ba_Max_x As Double
+Public Ba_Max_y As Double
+Public Ba_Max_H As Double
+
+Const Start_Row = 6 '数据起始位置
+Const Count_PerPage = 100 '每页数据个数，必须为偶数
+
+Private Sub CommandButton1_Click()
+    Dim Dia1 As Object, Strr As String, PPath As String
+    Dim Datums As Variant
+    Dim row As Long, RowIndex As Long, col As Long, DataCount As Long, PageIndex As Long
+    Dim stageStr As String, stageStr_Min_X As String, stageStr_Min_Y As String, stageStr_Max_X As String, stageStr_Max_Y As String, stageStr_Min_H As String, stageStr_Max_H As String
+'定义大坝坐标系
+CoSys_AX = 3743173.79
+CoSys_AY = 269083.559
+CoSys_BX = 3743173.79
+CoSys_BY = 268415.559
+CoSys_Az = 270# * 3.14159265 / 180#
+
+Ba_Min_x = -999999#
+Ba_Min_y = -999999#
+Ba_Min_H = -999999#
+
+Ba_Max_x = -999999#
+Ba_Max_y = -999999#
+Ba_Max_H = -999999#
+    
+    row = 0
+    DataCount = 1
+    Set Dia1 = Application.FileDialog(msoFileDialogFilePicker)
+    Dia1.Title = "版权所有(C) 中国电建一二·五联合体  覃东 QQ:61902475 Email:cehui@139.com V20160225"
+    With Dia1
+        .AllowMultiSelect = False '限制只能同时选择一个文件
+        .Filters.Clear
+        .Filters.Add "南方CASS格式", "*.dat", 1 '限制显示的文件类型
+        .Show
+        For Each vrtSelectedItem In .SelectedItems
+            PPath = vrtSelectedItem
+        Next
+    End With
+    If Trim(PPath) <> "" Then
+        Open PPath For Input As #1
+            Do While Not EOF(1)
+                Line Input #1, Strr
+                If Trim(Strr) <> "" Then
+                Datums = Split(Strr, ",")
+                If UBound(Datums) = 4 Then
+                CalStage Val(Datums(3)), Val(Datums(2)), Val(Datums(4)) '计算大坝坐标桩号
+                PageIndex = Int((DataCount - 1) / Count_PerPage)
+                RowIndex = Int((DataCount - 1 - PageIndex * Count_PerPage) / (Count_PerPage / 2))
+                If RowIndex = 0 Then
+                 col = 2
+                Else
+                 col = Start_Row '6
+                End If
+                        '增加一页
+                        If DataCount = PageIndex * Count_PerPage + 1 Then
+                            Range("A" & Start_Row & ":H" & ((Count_PerPage / 2) + Start_Row - 1)).Select
+                            Application.CutCopyMode = False
+                            Selection.Copy
+                            Range("A" & (PageIndex * (Count_PerPage / 2) + Start_Row)).Select
+                            ActiveSheet.Paste
+                            Range("A" & (PageIndex * (Count_PerPage / 2) + Start_Row) & ":" & "H" & ((PageIndex + 1) * (Count_PerPage / 2) + Start_Row - 1)).Select
+                            Selection.RowHeight = 13
+                            Selection.ClearContents
+                        End If
+                If (DataCount - 1) Mod (Count_PerPage / 2) = 0 Then row = 0
+                    Sheet1.Cells(PageIndex * (Count_PerPage / 2) + Start_Row + row, col - 1) = DataCount
+                    Sheet1.Cells(PageIndex * (Count_PerPage / 2) + Start_Row + row, col) = Datums(3)
+                    Sheet1.Cells(PageIndex * (Count_PerPage / 2) + Start_Row + row, col + 1) = Datums(2)
+                    Sheet1.Cells(PageIndex * (Count_PerPage / 2) + Start_Row + row, col + 2) = Datums(4)
+                row = row + 1
+                DataCount = DataCount + 1
+                End If
+                End If
+            Loop
+        Close #1
+        '设置打印区域
+        ActiveSheet.PageSetup.PrintArea = "$A$" & (Start_Row - 1) & ":$H$" & ((PageIndex + 1) * (Count_PerPage / 2) + Start_Row - 1)
+    
+    '探测桩号范围
+    stageStr_Min_X = "纵0+" & Format(Round(Ba_Min_x, 2), "0.00")
+    stageStr_Max_X = "纵0+" & Format(Round(Ba_Max_x, 2), "0.00")
+    
+    '适用于两河口，偏距要反号
+    If Ba_Min_y > 0 Then
+    stageStr_Min_Y = "坝0" & Format(-Round(Ba_Min_y, 2), "0.00")
+    Else
+    stageStr_Min_Y = "坝0+" & Format(-Round(Ba_Min_y, 2), "0.00")
+    End If
+    
+    If Ba_Max_y > 0 Then
+    stageStr_Max_Y = "坝0" & Format(-Round(Ba_Max_y, 2), "0.00")
+    Else
+    stageStr_Max_Y = "坝0+" & Format(-Round(Ba_Max_y, 2), "0.00")
+    End If
+    
+    stageStr_Min_H = "EL." & Format(Round(Ba_Min_H, 2), "0.00")
+    stageStr_Max_H = "EL." & Format(Round(Ba_Max_H, 2), "0.00")
+    
+    If Ba_Min_y > 0 Then
+    stageStr = "(" & stageStr_Min_X & "～" & stageStr_Max_X & "；" & stageStr_Min_Y & "～" & stageStr_Max_Y & "；" & stageStr_Min_H & "～" & stageStr_Max_H & ")"
+    ElseIf Ba_Min_y < 0 And Ba_Max_y > 0 Then
+    stageStr = "(" & stageStr_Min_X & "～" & stageStr_Max_X & "；" & stageStr_Max_Y & "～" & stageStr_Min_Y & "；" & stageStr_Min_H & "～" & stageStr_Max_H & ")"
+    ElseIf Ba_Max_y < 0 Then
+    stageStr = "(" & stageStr_Min_X & "～" & stageStr_Max_X & "；" & stageStr_Max_Y & "～" & stageStr_Min_Y & "；" & stageStr_Min_H & "～" & stageStr_Max_H & ")"
+    Else
+    stageStr = "(" & stageStr_Min_X & "～" & stageStr_Max_X & "；" & stageStr_Min_Y & "～" & stageStr_Max_Y & "；" & stageStr_Min_H & "～" & stageStr_Max_H & ")"
+    End If
+    
+    Range("A3:H3").Select
+    Selection.Font.Bold = False
+    Range("A3:H3").Select
+    ActiveCell.FormulaR1C1 = "工程部位：" & stageStr
+    With ActiveCell.Characters(Start:=1, Length:=5).Font
+        .Name = "黑体"
+        .FontStyle = "加粗"
+        .Size = 10
+        .Strikethrough = False
+        .Superscript = False
+        .Subscript = False
+        .OutlineFont = False
+        .Shadow = False
+        .Underline = xlUnderlineStyleNone
+        .ColorIndex = xlAutomatic
+    End With
+   
+    End If
+End Sub
+
+
+'计算桩号范围
+Public Sub CalStage(pn As Double, pe As Double, ph As Double)
+Dim px_tmp As Double, py_tmp As Double
+px_tmp = Round((pn - CoSys_AX) * Cos(CoSys_Az) + (pe - CoSys_AY) * Sin(CoSys_Az), 3)
+py_tmp = Round(-(pn - CoSys_AX) * Sin(CoSys_Az) + (pe - CoSys_AY) * Cos(CoSys_Az), 3)
+
+If Ba_Min_x = -999999# Or px_tmp < Ba_Min_x Then Ba_Min_x = px_tmp
+If Ba_Min_y = -999999# Or py_tmp < Ba_Min_y Then Ba_Min_y = py_tmp
+If Ba_Min_H = -999999# Or ph < Ba_Min_H Then Ba_Min_H = ph
+
+If Ba_Max_x = -999999# Or px_tmp > Ba_Max_x Then Ba_Max_x = px_tmp
+If Ba_Max_y = -999999# Or py_tmp > Ba_Max_y Then Ba_Max_y = py_tmp
+If Ba_Max_H = -999999# Or ph > Ba_Max_H Then Ba_Max_H = ph
+End Sub
+
